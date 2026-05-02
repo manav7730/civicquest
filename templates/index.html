@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CivicQuest — Election RPG</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Google Maps (API key injected by Flask) -->
+  <script src="https://maps.googleapis.com/maps/api/js?key={{ maps_api_key }}&libraries=places" defer></script>
+
+  <style>
+    :root {
+      --saffron:  #FF9933;
+      --white:    #FFFFFF;
+      --green:    #138808;
+      --navy:     #000080;
+      --gold:     #D4AF37;
+      --bg:       #0D1117;
+      --surface:  #161B22;
+      --surface2: #21262D;
+      --border:   rgba(255,255,255,0.1);
+      --text:     #E6EDF3;
+      --muted:    #8B949E;
+      --radius:   12px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ───────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .logo {
+      font-family: 'Cinzel', serif;
+      font-size: 1.4rem;
+      color: var(--saffron);
+      letter-spacing: 0.05em;
+    }
+    .logo span { color: var(--gold); }
+    .hud {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      font-size: 0.85rem;
+    }
+    .hud-item { color: var(--muted); }
+    .hud-item strong { color: var(--text); }
+    .xp-bar-wrap { width: 120px; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+    .xp-bar { height: 100%; background: var(--saffron); transition: width 0.5s; border-radius: 3px; }
+
+    /* ── Main layout ──────────────────────────────────────────── */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 1rem;
+      padding: 1rem 1.5rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* ── Cards ────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+    }
+    .card-title {
+      font-family: 'Cinzel', serif;
+      font-size: 1rem;
+      color: var(--gold);
+      margin-bottom: 0.75rem;
+    }
+
+    /* ── Welcome screen ───────────────────────────────────────── */
+    #welcome-screen {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 70vh;
+      text-align: center;
+      gap: 1.5rem;
+    }
+    .hero-title {
+      font-family: 'Cinzel', serif;
+      font-size: 3rem;
+      color: var(--saffron);
+      line-height: 1.1;
+    }
+    .hero-subtitle { color: var(--muted); font-size: 1.1rem; max-width: 500px; line-height: 1.6; }
+    .tricolor-bar { display: flex; height: 6px; width: 220px; border-radius: 3px; overflow: hidden; }
+    .tricolor-bar span { flex: 1; }
+    .tc-s { background: var(--saffron); }
+    .tc-w { background: var(--white); }
+    .tc-g { background: var(--green); }
+
+    .setup-form {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      width: 100%;
+      max-width: 440px;
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    label { font-size: 0.8rem; color: var(--muted); display: block; margin-bottom: 0.3rem; }
+    input, select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 0.85rem;
+      color: var(--text);
+      font-size: 0.9rem;
+      font-family: inherit;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--saffron); }
+
+    /* ── Buttons ──────────────────────────────────────────────── */
+    .btn {
+      padding: 0.65rem 1.4rem;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.9rem;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: var(--saffron); color: #000; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-green { background: var(--green); color: #fff; }
+    .btn:hover { opacity: 0.88; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Quest area (left column) ─────────────────────────────── */
+    #game-area { display: none; }
+    #game-area.visible { display: contents; }
+
+    .quest-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .quest-badge-icon { font-size: 2rem; }
+    .quest-meta h2 {
+      font-family: 'Cinzel', serif;
+      font-size: 1rem;
+      color: var(--saffron);
+    }
+    .quest-meta p { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+
+    .progress-dots {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 1rem;
+    }
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      transition: background 0.3s;
+    }
+    .dot.active  { background: var(--saffron); }
+    .dot.done    { background: var(--green); }
+
+    /* ── Chat window ──────────────────────────────────────────── */
+    #chat-window {
+      height: 340px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      scroll-behavior: smooth;
+    }
+    .msg {
+      max-width: 85%;
+      padding: 0.65rem 1rem;
+      border-radius: 12px;
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+    .msg-guide {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+    .msg-player {
+      background: var(--saffron);
+      color: #000;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+    .msg-guide strong { color: var(--gold); font-size: 0.78rem; display: block; margin-bottom: 2px; }
+    .xp-toast {
+      align-self: center;
+      font-size: 0.78rem;
+      color: var(--gold);
+      background: rgba(212,175,55,0.1);
+      border: 1px solid rgba(212,175,55,0.3);
+      padding: 3px 12px;
+      border-radius: 20px;
+    }
+
+    /* ── Chat input ───────────────────────────────────────────── */
+    .chat-input-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .chat-input-row input {
+      flex: 1;
+      padding: 0.6rem 0.85rem;
+    }
+
+    /* ── Quick questions ──────────────────────────────────────── */
+    .quick-qs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 0.75rem;
+    }
+    .quick-q {
+      font-size: 0.78rem;
+      padding: 4px 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      cursor: pointer;
+      color: var(--muted);
+      transition: all 0.15s;
+    }
+    .quick-q:hover { border-color: var(--saffron); color: var(--saffron); }
+
+    /* ── Right panel ──────────────────────────────────────────── */
+    .right-panel { display: flex; flex-direction: column; gap: 1rem; }
+
+    /* Badges */
+    .badges-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .badge-chip {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+    }
+    .badge-chip.locked { opacity: 0.35; filter: grayscale(1); }
+
+    /* Map */
+    #booth-map {
+      width: 100%;
+      height: 220px;
+      border-radius: 8px;
+      background: var(--surface2);
+      overflow: hidden;
+    }
+    .booth-input-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .booth-input-row input { flex: 1; }
+
+    /* Language switcher */
+    .lang-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 5px;
+    }
+    .lang-btn {
+      padding: 5px;
+      font-size: 0.72rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--muted);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .lang-btn:hover, .lang-btn.active { border-color: var(--saffron); color: var(--saffron); }
+
+    /* Quest complete overlay */
+    .quest-complete-banner {
+      display: none;
+      background: linear-gradient(135deg, rgba(19,136,8,0.2), rgba(212,175,55,0.15));
+      border: 1px solid var(--green);
+      border-radius: var(--radius);
+      padding: 1rem;
+      text-align: center;
+      margin-top: 0.75rem;
+    }
+    .quest-complete-banner.show { display: block; }
+    .quest-complete-banner h3 { color: var(--gold); font-family: 'Cinzel', serif; margin-bottom: 0.5rem; }
+
+    /* Loading spinner */
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid transparent; border-top-color: currentColor; border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      main { grid-template-columns: 1fr; }
+      .hero-title { font-size: 2rem; }
+      .form-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">Civic<span>Quest</span></div>
+  <div class="hud" id="hud" style="display:none">
+    <div class="hud-item"><strong id="hud-name">—</strong></div>
+    <div class="hud-item">XP: <strong id="hud-xp">0</strong></div>
+    <div class="xp-bar-wrap"><div class="xp-bar" id="xp-bar" style="width:0%"></div></div>
+    <div class="hud-item" id="hud-quest">—</div>
+  </div>
+</header>
+
+<!-- ── Welcome screen ─────────────────────────────────────────────────────── -->
+<main>
+  <div id="welcome-screen">
+    <div class="tricolor-bar"><span class="tc-s"></span><span class="tc-w"></span><span class="tc-g"></span></div>
+    <div class="hero-title">CivicQuest</div>
+    <p class="hero-subtitle">
+      Embark on India's greatest democratic adventure. Complete 5 quests to become a
+      <strong style="color:var(--gold)">Democracy Champion</strong>.
+    </p>
+
+    <form class="setup-form" onsubmit="startGame(event)">
+      <div>
+        <label>Your name</label>
+        <input type="text" id="player-name" placeholder="Enter your name" required maxlength="50" />
+      </div>
+      <div class="form-row">
+        <div>
+          <label>Your state</label>
+          <select id="player-state">
+            <option>Gujarat</option><option>Maharashtra</option><option>Rajasthan</option>
+            <option>Uttar Pradesh</option><option>Tamil Nadu</option><option>Karnataka</option>
+            <option>West Bengal</option><option>Madhya Pradesh</option><option>Delhi</option>
+            <option>Punjab</option><option>Bihar</option><option>Kerala</option>
+            <option>Andhra Pradesh</option><option>Telangana</option><option>Other</option>
+          </select>
+        </div>
+        <div>
+          <label>Language</label>
+          <select id="player-lang">
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="gu">Gujarati</option>
+            <option value="ta">Tamil</option>
+            <option value="te">Telugu</option>
+            <option value="mr">Marathi</option>
+            <option value="bn">Bengali</option>
+            <option value="kn">Kannada</option>
+            <option value="ml">Malayalam</option>
+            <option value="pa">Punjabi</option>
+          </select>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary" id="start-btn">
+        ⚔️ Begin Adventure
+      </button>
+    </form>
+  </div>
+
+  <!-- ── Game area ─────────────────────────────────────────────────────────── -->
+  <div id="game-area">
+
+    <!-- Left column: Quest + Chat -->
+    <div>
+      <div class="card">
+        <div class="quest-header">
+          <div class="quest-badge-icon" id="quest-icon">🗺️</div>
+          <div class="quest-meta">
+            <h2 id="quest-title">Loading quest…</h2>
+            <p id="quest-subtitle"></p>
+          </div>
+        </div>
+
+        <div class="progress-dots" id="progress-dots"></div>
+
+        <div id="chat-window"></div>
+
+        <div class="quick-qs" id="quick-qs"></div>
+
+        <div class="chat-input-row">
+          <input type="text" id="chat-input" placeholder="Ask Desh anything about elections…" />
+          <button class="btn btn-primary" id="send-btn" onclick="sendMessage()">Send</button>
+        </div>
+
+        <div class="quest-complete-banner" id="complete-banner">
+          <h3 id="banner-badge-text">Quest Complete!</h3>
+          <p id="banner-msg" style="color:var(--muted);font-size:0.85rem;margin:0.4rem 0 0.8rem"></p>
+          <button class="btn btn-green" onclick="nextQuest()">Next Quest ➜</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column: Badges, Map, Language -->
+    <div class="right-panel">
+
+      <!-- Badges -->
+      <div class="card">
+        <div class="card-title">Your Badges</div>
+        <div class="badges-grid" id="badges-grid"></div>
+      </div>
+
+      <!-- Polling Booth Finder (Google Maps) -->
+      <div class="card">
+        <div class="card-title">Find Your Polling Booth</div>
+        <div id="booth-map"></div>
+        <div class="booth-input-row">
+          <input type="text" id="booth-address" placeholder="Enter your area / pincode" />
+          <button class="btn btn-secondary" onclick="findBooth()">Search</button>
+        </div>
+      </div>
+
+      <!-- Language switcher -->
+      <div class="card">
+        <div class="card-title">Switch Language</div>
+        <div class="lang-grid" id="lang-grid"></div>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+const LANGS = [
+  { code:'en', label:'English' }, { code:'hi', label:'Hindi' },
+  { code:'gu', label:'ગુજ.'    }, { code:'ta', label:'தமிழ்'  },
+  { code:'te', label:'తెలుగు'  }, { code:'mr', label:'मराठी' },
+  { code:'bn', label:'বাংলা'  }, { code:'kn', label:'ಕನ್ನಡ' },
+  { code:'ml', label:'മലയ'    }, { code:'pa', label:'ਪੰਜਾਬੀ'  },
+];
+const ALL_BADGES = [
+  { emoji:'📋', name:'Registered Citizen'   },
+  { emoji:'🗺️', name:'Constituency Scholar' },
+  { emoji:'📅', name:'Election Analyst'     },
+  { emoji:'🗳️', name:'Polling Expert'       },
+  { emoji:'🏆', name:'Democracy Champion'   },
+];
+const MAX_XP = 1000;
+
+let sessionId    = null;
+let gameState    = null;
+let map          = null;
+let currentLang  = 'en';
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  buildLangGrid();
+  document.getElementById('chat-input').addEventListener('keypress', e => {
+    if (e.key === 'Enter') sendMessage();
+  });
+});
+
+// ── Start game ────────────────────────────────────────────────────────────────
+async function startGame(e) {
+  e.preventDefault();
+  const btn    = document.getElementById('start-btn');
+  const name   = document.getElementById('player-name').value.trim();
+  const state  = document.getElementById('player-state').value;
+  const lang   = document.getElementById('player-lang').value;
+
+  btn.disabled   = true;
+  btn.innerHTML  = '<span class="spinner"></span> Loading…';
+  currentLang    = lang;
+
+  const res  = await post('/api/start', { name, state, language: lang });
+  sessionId  = res.session_id;
+  gameState  = res.game_state;
+
+  document.getElementById('welcome-screen').style.display = 'none';
+  document.getElementById('game-area').classList.add('visible');
+  document.getElementById('hud').style.display = 'flex';
+
+  updateHUD();
+  buildProgressDots();
+  buildBadgesGrid();
+  initMap();
+  activateLang(lang);
+  await loadScene();
+}
+
+// ── Load scene narration ───────────────────────────────────────────────────────
+async function loadScene() {
+  addMsg('guide', '<span class="spinner"></span> Desh is preparing your quest…');
+  const res = await post('/api/scene', { session_id: sessionId });
+  clearWindow();
+
+  if (res.type === 'game_over') {
+    addMsg('guide', res.message);
+    return;
+  }
+
+  document.getElementById('quest-title').textContent   = res.quest_title;
+  document.getElementById('quest-subtitle').textContent = res.quest_subtitle;
+  document.getElementById('quest-icon').textContent     = res.badge_emoji;
+
+  addMsg('guide', res.narration);
+  buildQuickQs(res.suggested_questions);
+  document.getElementById('complete-banner').classList.remove('show');
+}
+
+// ── Send message ──────────────────────────────────────────────────────────────
+async function sendMessage(text) {
+  const input = document.getElementById('chat-input');
+  const msg   = text || input.value.trim();
+  if (!msg) return;
+
+  input.value = '';
+  clearQuickQs();
+  addMsg('player', msg);
+
+  const sendBtn  = document.getElementById('send-btn');
+  sendBtn.disabled = true;
+  addMsg('guide', '<span class="spinner"></span> Desh is thinking…', 'typing-msg');
+
+  const res = await post('/api/answer', { session_id: sessionId, input: msg });
+  removeMsg('typing-msg');
+  sendBtn.disabled = false;
+
+  addMsg('guide', res.response);
+  if (res.xp_gained > 0) addXpToast(`+${res.xp_gained} XP`);
+
+  gameState = res.game_state;
+  updateHUD();
+
+  // Show "quest complete" button after enough interaction
+  if (res.quest_progressed) showCompletePrompt(gameState);
+}
+
+// ── Next quest ────────────────────────────────────────────────────────────────
+async function nextQuest() {
+  const res = await post('/api/next_quest', { session_id: sessionId });
+
+  if (res.type === 'game_over') {
+    clearWindow();
+    addMsg('guide', res.message);
+    document.getElementById('complete-banner').classList.remove('show');
+    document.getElementById('quest-title').textContent = '🏆 You are a Democracy Champion!';
+    return;
+  }
+
+  gameState = res.game_state;
+  updateHUD();
+  buildProgressDots();
+  buildBadgesGrid();
+  await loadScene();
+}
+
+// ── Booth finder ──────────────────────────────────────────────────────────────
+function findBooth() {
+  if (!map) return;
+  const addr = document.getElementById('booth-address').value.trim();
+  if (!addr) return;
+
+  const query = `polling booth ${addr} ${gameState?.state_name || ''} India`;
+  if (window.google) {
+    const service = new google.maps.places.PlacesService(map);
+    service.textSearch({ query }, (results, status) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK && results[0]) {
+        map.setCenter(results[0].geometry.location);
+        map.setZoom(14);
+        new google.maps.Marker({ map, position: results[0].geometry.location, title: results[0].name });
+      }
+    });
+  }
+}
+
+function initMap() {
+  if (!window.google) return;
+  map = new google.maps.Map(document.getElementById('booth-map'), {
+    center: { lat: 23.0225, lng: 72.5714 },
+    zoom: 11,
+    styles: [{ elementType:'geometry', stylers:[{ color:'#1d2c4d' }] },
+             { elementType:'labels.text.fill', stylers:[{ color:'#8ec3b9' }] }],
+  });
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function addMsg(type, html, id) {
+  const win  = document.getElementById('chat-window');
+  const div  = document.createElement('div');
+  div.className = `msg msg-${type}`;
+  if (id) div.id = id;
+  if (type === 'guide') div.innerHTML = `<strong>⚔ Desh</strong>${html}`;
+  else div.textContent = html;
+  win.appendChild(div);
+  win.scrollTop = win.scrollHeight;
+}
+function removeMsg(id) { document.getElementById(id)?.remove(); }
+function clearWindow() { document.getElementById('chat-window').innerHTML = ''; }
+function addXpToast(text) {
+  const win  = document.getElementById('chat-window');
+  const div  = document.createElement('div');
+  div.className = 'xp-toast';
+  div.textContent = text;
+  win.appendChild(div);
+  win.scrollTop = win.scrollHeight;
+  setTimeout(() => div.remove(), 3000);
+}
+
+function updateHUD() {
+  if (!gameState) return;
+  document.getElementById('hud-name').textContent  = gameState.player_name;
+  document.getElementById('hud-xp').textContent    = gameState.total_xp;
+  document.getElementById('hud-quest').textContent = `Quest ${gameState.quest_index + 1}/${gameState.total_quests}`;
+  document.getElementById('xp-bar').style.width    = Math.min(100, (gameState.total_xp / MAX_XP) * 100) + '%';
+}
+
+function buildProgressDots() {
+  if (!gameState) return;
+  const wrap = document.getElementById('progress-dots');
+  wrap.innerHTML = '';
+  for (let i = 0; i < gameState.total_quests; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i < gameState.quest_index ? ' done' : i === gameState.quest_index ? ' active' : '');
+    wrap.appendChild(d);
+  }
+}
+
+function buildBadgesGrid() {
+  const grid = document.getElementById('badges-grid');
+  grid.innerHTML = '';
+  const earned = (gameState?.badges || []).map(b => b.name);
+  ALL_BADGES.forEach(b => {
+    const chip = document.createElement('div');
+    chip.className = 'badge-chip' + (earned.includes(b.name) ? '' : ' locked');
+    chip.innerHTML = `<span style="font-size:14px">${b.emoji}</span><span>${b.name}</span>`;
+    grid.appendChild(chip);
+  });
+}
+
+function buildQuickQs(questions) {
+  const wrap = document.getElementById('quick-qs');
+  wrap.innerHTML = '';
+  (questions || []).slice(0, 4).forEach(q => {
+    const btn = document.createElement('button');
+    btn.className   = 'quick-q';
+    btn.textContent = q;
+    btn.onclick     = () => sendMessage(q);
+    wrap.appendChild(btn);
+  });
+}
+function clearQuickQs() { document.getElementById('quick-qs').innerHTML = ''; }
+
+function showCompletePrompt(gs) {
+  const banner = document.getElementById('complete-banner');
+  const quest  = gs ? ALL_BADGES[gs.quest_index] : null;
+  if (quest) {
+    document.getElementById('banner-badge-text').textContent = `${quest.emoji} Quest Complete — ${quest.name}`;
+    document.getElementById('banner-msg').textContent = 'You have earned a new badge! Ready for the next quest?';
+  }
+  banner.classList.add('show');
+}
+
+function buildLangGrid() {
+  const grid = document.getElementById('lang-grid');
+  LANGS.forEach(l => {
+    const btn = document.createElement('button');
+    btn.className   = 'lang-btn' + (l.code === currentLang ? ' active' : '');
+    btn.dataset.code = l.code;
+    btn.textContent  = l.label;
+    btn.onclick      = () => activateLang(l.code);
+    grid.appendChild(btn);
+  });
+}
+function activateLang(code) {
+  currentLang = code;
+  document.querySelectorAll('.lang-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.code === code);
+  });
+  if (gameState) gameState.language = code;
+}
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function post(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+</script>
+</body>
+</html>

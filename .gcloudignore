@@ -1,0 +1,24 @@
+# Ignore local env files (secrets are passed via --set-env-vars)
+.env
+.env.example
+
+# Git
+.git
+.gitignore
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Tests (not needed in production image)
+tests/
+
+# IDE and OS files
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+
+# Deployment scripts
+deploy.ps1

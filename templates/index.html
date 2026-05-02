@@ -4,13 +4,25 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CivicQuest — Election RPG</title>
+  <meta name="description" content="CivicQuest is an educational text-based RPG that guides players through the Indian election cycle, teaching them about voter registration, constituencies, polling, and democracy." />
+
+  <!-- Structured Data for Educational Application -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "CivicQuest",
+    "applicationCategory": "EducationalApplication",
+    "description": "An interactive RPG teaching citizens about the Indian democratic process."
+  }
+  </script>
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 
   <!-- Google Maps (API key injected by Flask) -->
-  <script src="https://maps.googleapis.com/maps/api/js?key={{ maps_api_key }}&libraries=places" defer></script>
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ maps_api_key }}&libraries=places"></script>
 
   <style>
     :root {
@@ -22,9 +34,9 @@
       --bg:       #0D1117;
       --surface:  #161B22;
       --surface2: #21262D;
-      --border:   rgba(255,255,255,0.1);
-      --text:     #E6EDF3;
-      --muted:    #8B949E;
+      --border:   rgba(255,255,255,0.15);
+      --text:     #F0F6FC;
+      --muted:    #A3B0BF;
       --radius:   12px;
     }
 
@@ -37,6 +49,21 @@
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+    }
+
+    /* ── Accessibility ────────────────────────────────────────── */
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0;
+    }
+    .skip-link {
+      position: absolute; top: -40px; left: 0; background: var(--saffron); color: #000;
+      padding: 8px; z-index: 100; transition: top 0.2s; text-decoration: none; font-weight: bold;
+    }
+    .skip-link:focus { top: 0; }
+    :focus-visible {
+      outline: 2px solid var(--saffron);
+      outline-offset: 2px;
     }
 
     /* ── Header ───────────────────────────────────────────────── */
@@ -137,7 +164,7 @@
       font-size: 0.9rem;
       font-family: inherit;
     }
-    input:focus, select:focus { outline: none; border-color: var(--saffron); }
+    input:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: none; border-color: var(--saffron); }
 
     /* ── Buttons ──────────────────────────────────────────────── */
     .btn {
@@ -340,37 +367,40 @@
   </style>
 </head>
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 
 <!-- ── Header ────────────────────────────────────────────────────────────── -->
-<header>
+<header role="banner">
   <div class="logo">Civic<span>Quest</span></div>
-  <div class="hud" id="hud" style="display:none">
-    <div class="hud-item"><strong id="hud-name">—</strong></div>
-    <div class="hud-item">XP: <strong id="hud-xp">0</strong></div>
-    <div class="xp-bar-wrap"><div class="xp-bar" id="xp-bar" style="width:0%"></div></div>
-    <div class="hud-item" id="hud-quest">—</div>
+  <div class="hud" id="hud" style="display:none" role="region" aria-label="Player Stats">
+    <div class="hud-item"><strong id="hud-name" aria-label="Player name">—</strong></div>
+    <div class="hud-item" aria-label="Experience points">XP: <strong id="hud-xp">0</strong></div>
+    <div class="xp-bar-wrap" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="1000" id="xp-progress-bar">
+      <div class="xp-bar" id="xp-bar" style="width:0%"></div>
+    </div>
+    <div class="hud-item" id="hud-quest" aria-live="polite">—</div>
   </div>
 </header>
 
 <!-- ── Welcome screen ─────────────────────────────────────────────────────── -->
-<main>
+<main id="main-content" role="main">
   <div id="welcome-screen">
-    <div class="tricolor-bar"><span class="tc-s"></span><span class="tc-w"></span><span class="tc-g"></span></div>
-    <div class="hero-title">CivicQuest</div>
+    <div class="tricolor-bar" aria-hidden="true"><span class="tc-s"></span><span class="tc-w"></span><span class="tc-g"></span></div>
+    <h1 class="hero-title">CivicQuest</h1>
     <p class="hero-subtitle">
       Embark on India's greatest democratic adventure. Complete 5 quests to become a
       <strong style="color:var(--gold)">Democracy Champion</strong>.
     </p>
 
-    <form class="setup-form" onsubmit="startGame(event)">
+    <form class="setup-form" onsubmit="startGame(event)" aria-label="Game Setup">
       <div>
-        <label>Your name</label>
-        <input type="text" id="player-name" placeholder="Enter your name" required maxlength="50" />
+        <label for="player-name">Your name</label>
+        <input type="text" id="player-name" placeholder="Enter your name" required maxlength="50" aria-required="true" />
       </div>
       <div class="form-row">
         <div>
-          <label>Your state</label>
-          <select id="player-state">
+          <label for="player-state">Your state</label>
+          <select id="player-state" aria-required="true">
             <option>Gujarat</option><option>Maharashtra</option><option>Rajasthan</option>
             <option>Uttar Pradesh</option><option>Tamil Nadu</option><option>Karnataka</option>
             <option>West Bengal</option><option>Madhya Pradesh</option><option>Delhi</option>
@@ -379,8 +409,8 @@
           </select>
         </div>
         <div>
-          <label>Language</label>
-          <select id="player-lang">
+          <label for="player-lang">Language</label>
+          <select id="player-lang" aria-required="true">
             <option value="en">English</option>
             <option value="hi">Hindi</option>
             <option value="gu">Gujarati</option>
@@ -404,59 +434,61 @@
   <div id="game-area">
 
     <!-- Left column: Quest + Chat -->
-    <div>
+    <section aria-label="Quest and Chat Area">
       <div class="card">
-        <div class="quest-header">
-          <div class="quest-badge-icon" id="quest-icon">🗺️</div>
+        <div class="quest-header" aria-live="polite">
+          <div class="quest-badge-icon" id="quest-icon" aria-hidden="true">🗺️</div>
           <div class="quest-meta">
             <h2 id="quest-title">Loading quest…</h2>
             <p id="quest-subtitle"></p>
           </div>
         </div>
 
-        <div class="progress-dots" id="progress-dots"></div>
+        <div class="progress-dots" id="progress-dots" role="group" aria-label="Quest Progress"></div>
 
-        <div id="chat-window"></div>
+        <div id="chat-window" role="log" aria-live="polite" aria-label="Chat History"></div>
 
-        <div class="quick-qs" id="quick-qs"></div>
+        <div class="quick-qs" id="quick-qs" aria-label="Suggested Questions"></div>
 
         <div class="chat-input-row">
+          <label for="chat-input" class="sr-only">Your message to Desh</label>
           <input type="text" id="chat-input" placeholder="Ask Desh anything about elections…" />
           <button class="btn btn-primary" id="send-btn" onclick="sendMessage()">Send</button>
         </div>
 
-        <div class="quest-complete-banner" id="complete-banner">
+        <div class="quest-complete-banner" id="complete-banner" role="alert" aria-live="assertive">
           <h3 id="banner-badge-text">Quest Complete!</h3>
           <p id="banner-msg" style="color:var(--muted);font-size:0.85rem;margin:0.4rem 0 0.8rem"></p>
-          <button class="btn btn-green" onclick="nextQuest()">Next Quest ➜</button>
+          <button class="btn btn-green" id="next-quest-btn" onclick="nextQuest()">Next Quest ➜</button>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- Right column: Badges, Map, Language -->
     <div class="right-panel">
 
       <!-- Badges -->
-      <div class="card">
-        <div class="card-title">Your Badges</div>
+      <section class="card" aria-label="Your Badges">
+        <h2 class="card-title">Your Badges</h2>
         <div class="badges-grid" id="badges-grid"></div>
-      </div>
+      </section>
 
       <!-- Polling Booth Finder (Google Maps) -->
-      <div class="card">
-        <div class="card-title">Find Your Polling Booth</div>
-        <div id="booth-map"></div>
+      <section class="card" aria-label="Find Your Polling Booth">
+        <h2 class="card-title">Find Your Polling Booth</h2>
+        <div id="booth-map" aria-label="Interactive map showing polling booths"></div>
         <div class="booth-input-row">
+          <label for="booth-address" class="sr-only">Enter your area or pincode</label>
           <input type="text" id="booth-address" placeholder="Enter your area / pincode" />
-          <button class="btn btn-secondary" onclick="findBooth()">Search</button>
+          <button class="btn btn-secondary" onclick="findBooth()" aria-label="Search for polling booths">Search</button>
         </div>
-      </div>
+      </section>
 
       <!-- Language switcher -->
-      <div class="card">
-        <div class="card-title">Switch Language</div>
-        <div class="lang-grid" id="lang-grid"></div>
-      </div>
+      <section class="card" aria-label="Switch Language">
+        <h2 class="card-title">Switch Language</h2>
+        <div class="lang-grid" id="lang-grid" role="group" aria-label="Available Languages"></div>
+      </section>
 
     </div>
   </div>
@@ -651,24 +683,28 @@ function updateHUD() {
 function buildProgressDots() {
   if (!gameState) return;
   const wrap = document.getElementById('progress-dots');
-  wrap.innerHTML = '';
+  const frag = document.createDocumentFragment();
   for (let i = 0; i < gameState.total_quests; i++) {
     const d = document.createElement('div');
     d.className = 'dot' + (i < gameState.quest_index ? ' done' : i === gameState.quest_index ? ' active' : '');
-    wrap.appendChild(d);
+    frag.appendChild(d);
   }
+  wrap.innerHTML = '';
+  wrap.appendChild(frag);
 }
 
 function buildBadgesGrid() {
   const grid = document.getElementById('badges-grid');
-  grid.innerHTML = '';
+  const frag = document.createDocumentFragment();
   const earned = (gameState?.badges || []).map(b => b.name);
   ALL_BADGES.forEach(b => {
     const chip = document.createElement('div');
     chip.className = 'badge-chip' + (earned.includes(b.name) ? '' : ' locked');
-    chip.innerHTML = `<span style="font-size:14px">${b.emoji}</span><span>${b.name}</span>`;
-    grid.appendChild(chip);
+    chip.innerHTML = `<span style="font-size:14px" aria-hidden="true">${b.emoji}</span><span>${b.name}</span>`;
+    frag.appendChild(chip);
   });
+  grid.innerHTML = '';
+  grid.appendChild(frag);
 }
 
 function buildQuickQs(questions) {

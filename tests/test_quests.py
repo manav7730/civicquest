@@ -11,23 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from game_engine import GameEngine, QUESTS, PlayerState
 
 
-# ── Fixtures ──────────────────────────────────────────────────────────────────
-
-@pytest.fixture
-def mock_gemini():
-    gemini = MagicMock()
-    gemini.generate.return_value = "Welcome, brave citizen! Your quest begins."
-    gemini.chat.return_value     = "Great question! [QUEST_PROGRESS] You are learning well."
-    return gemini
-
-@pytest.fixture
-def engine(mock_gemini):
-    return GameEngine(mock_gemini)
-
-@pytest.fixture
-def active_session(engine):
-    state = engine.new_game("test-session-001", "Rahul", "Gujarat", "en")
-    return "test-session-001", state
+# Fixtures are now imported from conftest.py
 
 
 # ── Quest definitions ─────────────────────────────────────────────────────────
@@ -155,3 +139,19 @@ def test_leaderboard_records_on_completion(engine):
     engine.advance_quest(sid)   # triggers _record_score
     scores = engine.get_top_scores()
     assert any(s["name"] == "Topscorer" for s in scores)
+
+# ── Edge Cases ───────────────────────────────────────────────────────────────
+
+def test_new_game_empty_name(engine):
+    state = engine.new_game("sess-empty", "", "Delhi", "en")
+    assert state["player_name"] == ""
+
+def test_advance_quest_out_of_bounds(engine):
+    sid = "out-of-bounds"
+    engine.new_game(sid, "Test", "Delhi", "en")
+    for _ in range(5):
+        engine.advance_quest(sid)
+    # 6th advance should return error
+    result = engine.advance_quest(sid)
+    assert result["type"] == "error"
+    assert result["message"] == "Game already completed."

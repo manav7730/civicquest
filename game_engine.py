@@ -8,8 +8,9 @@ Five quests walk the player through the entire Indian election cycle:
 
 import time
 import logging
-from dataclasses import dataclass, field, asdict
-from typing import Optional
+import threading
+from dataclasses import dataclass, field
+from typing import Optional, Dict, List, Any
 from gemini_client import GeminiClient
 
 logger = logging.getLogger(__name__)
@@ -170,12 +171,12 @@ QUESTS = [
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
 # In-memory leaderboard (replace with Firestore in production)
-_leaderboard: list[dict] = []
-
+_leaderboard: List[Dict[str, Any]] = []
+_leaderboard_lock = threading.Lock()
 
 # ── Game state ────────────────────────────────────────────────────────────────
 
-@dataclass
+@dataclass(slots=True)
 class PlayerState:
     session_id: str
     player_name: str
@@ -183,12 +184,13 @@ class PlayerState:
     language: str
     quest_index: int = 0
     total_xp: int = 0
-    badges: list = field(default_factory=list)
-    chat_history: list = field(default_factory=list)
+    badges: List[Dict[str, str]] = field(default_factory=list)
+    chat_history: List[Dict[str, str]] = field(default_factory=list)
     quest_completed: bool = False
     created_at: float = field(default_factory=time.time)
+    last_active: float = field(default_factory=time.time)
 
-    def current_quest(self) -> Optional[dict]:
+    def current_quest(self) -> Optional[Dict[str, Any]]:
         if self.quest_index < len(QUESTS):
             return QUESTS[self.quest_index]
         return None
@@ -200,25 +202,31 @@ class PlayerState:
 # ── Engine ────────────────────────────────────────────────────────────────────
 
 class GameEngine:
+    SESSION_TTL = 86400  # 24 hours
+
     def __init__(self, gemini: GeminiClient):
         self.gemini = gemini
-        self._sessions: dict[str, PlayerState] = {}
+        self._sessions: Dict[str, PlayerState] = {}
+        self._session_lock = threading.Lock()
+        self._cleanup_counter = 0
 
     # ── Public API ────────────────────────────────────────────────────────────
 
     def new_game(self, session_id: str, player_name: str,
-                 state_name: str, language: str) -> dict:
+                 state_name: str, language: str) -> Dict[str, Any]:
+        self._maybe_cleanup()
         state = PlayerState(
             session_id=session_id,
             player_name=player_name,
             state_name=state_name,
             language=language,
         )
-        self._sessions[session_id] = state
+        with self._session_lock:
+            self._sessions[session_id] = state
         logger.info("New game: %s (%s)", player_name, session_id[:8])
         return self._state_summary(state)
 
-    def get_current_scene(self, session_id: str) -> dict:
+    def get_current_scene(self, session_id: str) -> Dict[str, Any]:
         state = self._get_state(session_id)
         quest = state.current_quest()
         if not quest:
@@ -249,7 +257,7 @@ class GameEngine:
             "game_state": self._state_summary(state),
         }
 
-    def process_input(self, session_id: str, user_input: str) -> dict:
+    def process_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
         state = self._get_state(session_id)
         quest = state.current_quest()
         if not quest:
@@ -295,8 +303,11 @@ class GameEngine:
             "game_state": self._state_summary(state),
         }
 
-    def advance_quest(self, session_id: str) -> dict:
+    def advance_quest(self, session_id: str) -> Dict[str, Any]:
         state = self._get_state(session_id)
+        if state.is_finished():
+            return {"type": "error", "message": "Game already completed."}
+            
         quest = state.current_quest()
         if not quest:
             return {"type": "error", "message": "No active quest."}
@@ -330,18 +341,36 @@ class GameEngine:
             "game_state": self._state_summary(state),
         }
 
-    def get_top_scores(self, limit: int = 10) -> list[dict]:
-        return sorted(_leaderboard, key=lambda x: x["xp"], reverse=True)[:limit]
+    def get_top_scores(self, limit: int = 10) -> List[Dict[str, Any]]:
+        with _leaderboard_lock:
+            return sorted(_leaderboard, key=lambda x: x["xp"], reverse=True)[:limit]
 
     # ── Private helpers ───────────────────────────────────────────────────────
 
     def _get_state(self, session_id: str) -> PlayerState:
-        state = self._sessions.get(session_id)
+        with self._session_lock:
+            state = self._sessions.get(session_id)
         if not state:
             raise ValueError(f"Session not found: {session_id}")
+        state.last_active = time.time()
         return state
 
-    def _state_summary(self, state: PlayerState) -> dict:
+    def _maybe_cleanup(self) -> None:
+        """Periodically remove old sessions to free memory."""
+        self._cleanup_counter += 1
+        if self._cleanup_counter < 100:
+            return
+        self._cleanup_counter = 0
+        now = time.time()
+        with self._session_lock:
+            to_remove = [sid for sid, state in self._sessions.items() 
+                         if now - state.last_active > self.SESSION_TTL]
+            for sid in to_remove:
+                del self._sessions[sid]
+        if to_remove:
+            logger.info("Cleaned up %d inactive sessions", len(to_remove))
+
+    def _state_summary(self, state: PlayerState) -> Dict[str, Any]:
         quest = state.current_quest()
         return {
             "player_name": state.player_name,
@@ -364,13 +393,14 @@ class GameEngine:
             + ", ".join(f"{b['emoji']} {b['name']}" for b in state.badges)
         )
 
-    def _record_score(self, state: PlayerState):
-        _leaderboard.append({
-            "name": state.player_name,
-            "state": state.state_name,
-            "xp": state.total_xp,
-            "badges": len(state.badges),
-        })
+    def _record_score(self, state: PlayerState) -> None:
+        with _leaderboard_lock:
+            _leaderboard.append({
+                "name": state.player_name,
+                "state": state.state_name,
+                "xp": state.total_xp,
+                "badges": len(state.badges),
+            })
 
     @staticmethod
     def _language_label(code: str) -> str:

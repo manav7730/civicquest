@@ -2,7 +2,7 @@
 
 > An interactive quest-based web application that educates Indian citizens about
 > the complete election process through AI-powered storytelling, Google Maps integration,
-> and multilingual support across 10 Indian languages.
+> and multilingual support across 10 Indian languages. Fully accessible (WCAG compliant).
 
 ---
 
@@ -27,7 +27,9 @@ progressive learning**:
 4. **Google Maps + Places API** lets users find real polling booths in their area.
 5. **Google Cloud Translate API** supports 10 Indian languages so rural and
    semi-literate voters can participate.
-6. The app is deployed on **Google Cloud Run** for serverless scalability.
+6. **Built-in Accessibility** with screen-reader compatibility (ARIA roles, live regions),
+   keyboard navigation, and high-contrast design.
+7. The app is deployed on **Google Cloud Run** for serverless scalability.
 
 ---
 

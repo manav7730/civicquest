@@ -9,13 +9,14 @@ import os
 import time
 import logging
 import pathlib
+import functools
 from dotenv import dotenv_values
 from google import genai
 from google.genai import types
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 
 # Retry / throttle settings
 MAX_RETRIES    = 3      # max retry attempts on 429
@@ -38,7 +39,7 @@ class GeminiClient:
 
     # ── internal helpers ─────────────────────────────────────────────────────
 
-    def _throttle(self):
+    def _throttle(self) -> None:
         """Enforce a minimum delay between consecutive API calls."""
         elapsed = time.time() - self._last_call_ts
         if elapsed < CALL_DELAY_SEC:
@@ -48,7 +49,7 @@ class GeminiClient:
     def _is_rate_limit(exc: Exception) -> bool:
         """Return True if the exception is a 429 / resource-exhausted error."""
         msg = str(exc).lower()
-        return "429" in msg or "resource" in msg and "exhausted" in msg
+        return "429" in msg or ("resource" in msg and "exhausted" in msg)
 
     def _build_fallback_generate(self, knowledge: str) -> str:
         """Return a scene-like narrative built from quest knowledge."""
@@ -77,13 +78,19 @@ class GeminiClient:
 
     # ── public API ───────────────────────────────────────────────────────────
 
+    @functools.lru_cache(maxsize=128)
     def generate(self, prompt: str, knowledge: str = "") -> str:
         """Single-turn generation (scene narration) with retry and fallback."""
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 self._throttle()
                 response = self._client.models.generate_content(
-                    model=GEMINI_MODEL, contents=prompt
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        max_output_tokens=512,
+                        temperature=0.7,
+                    ),
                 )
                 self._last_call_ts = time.time()
                 return response.text.strip()
@@ -146,4 +153,3 @@ class GeminiClient:
                 return self._build_fallback_chat(knowledge, user_message)
 
         return self._build_fallback_chat(knowledge, user_message)
-

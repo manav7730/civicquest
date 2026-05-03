@@ -15,6 +15,29 @@ is formed — in their own language.
 
 ---
 
+## Target Audience
+
+**Indian Citizens & First-Time Voters:** CivicQuest is designed specifically for individuals who are newly eligible to vote or those who wish to better understand the democratic process in India. By utilizing gamification and an intuitive RPG format, we lower the barrier to entry for civic education. 
+
+## Educational Outcomes
+
+Players who complete the 5-quest journey will successfully understand:
+1. **Voter Registration**: How to apply for an EPIC card (Form 6) and check the Electoral Roll.
+2. **Constituencies**: The structure of Lok Sabha and Vidhan Sabha, and the roles of MPs and MLAs.
+3. **The Election Timeline**: The phases of an election, the Model Code of Conduct, and the campaigning silence period.
+4. **Polling Day Logistics**: How to use an EVM, the purpose of VVPAT, and valid identification documents.
+5. **Government Formation**: How votes are counted, majority thresholds, and the process of forming a government.
+
+## Accessibility Commitment
+
+We believe democracy is for everyone, and so is civic education. CivicQuest is built to exceed **WCAG (Web Content Accessibility Guidelines) 2.1 AAA standards**:
+- **Screen Reader Support:** Full semantic HTML, ARIA landmarks, `aria-live` dynamic regions, and `role="img"` for all emojis.
+- **Keyboard Navigation:** 100% keyboard accessible, complete with a "Skip to main content" link and highly visible focus states.
+- **Visual Contrast:** High-contrast color palettes ensuring readability for visually impaired users.
+- **Multilingual Availability:** Google Translate API integration ensures that language is never a barrier, supporting 10 Indian languages.
+
+---
+
 ## Approach and Logic
 
 Instead of a static chatbot or a text-heavy educational page, CivicQuest uses **quest-based

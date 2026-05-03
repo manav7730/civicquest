@@ -1,0 +1,339 @@
+:root {
+  --saffron:  #FF9933;
+  --white:    #FFFFFF;
+  --green:    #138808;
+  --navy:     #000080;
+  --gold:     #D4AF37;
+  --bg:       #0D1117;
+  --surface:  #161B22;
+  --surface2: #21262D;
+  --border:   rgba(255,255,255,0.15);
+  --text:     #F0F6FC;
+  --muted:    #A3B0BF;
+  --radius:   12px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Accessibility ────────────────────────────────────────── */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0;
+}
+.skip-link {
+  position: absolute; top: -40px; left: 0; background: var(--saffron); color: #000;
+  padding: 8px; z-index: 100; transition: top 0.2s; text-decoration: none; font-weight: bold;
+}
+.skip-link:focus { top: 0; }
+:focus-visible {
+  outline: 2px solid var(--saffron);
+  outline-offset: 2px;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.logo {
+  font-family: 'Cinzel', serif;
+  font-size: 1.4rem;
+  color: var(--saffron);
+  letter-spacing: 0.05em;
+}
+.logo span { color: var(--gold); }
+.hud {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+.hud-item { color: var(--muted); }
+.hud-item strong { color: var(--text); }
+.xp-bar-wrap { width: 120px; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+.xp-bar { height: 100%; background: var(--saffron); transition: width 0.5s; border-radius: 3px; }
+
+/* ── Main layout ──────────────────────────────────────────── */
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── Cards ────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+.card-title {
+  font-family: 'Cinzel', serif;
+  font-size: 1rem;
+  color: var(--gold);
+  margin-bottom: 0.75rem;
+}
+
+/* ── Welcome screen ───────────────────────────────────────── */
+#welcome-screen {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  text-align: center;
+  gap: 1.5rem;
+}
+.hero-title {
+  font-family: 'Cinzel', serif;
+  font-size: 3rem;
+  color: var(--saffron);
+  line-height: 1.1;
+}
+.hero-subtitle { color: var(--muted); font-size: 1.1rem; max-width: 500px; line-height: 1.6; }
+.tricolor-bar { display: flex; height: 6px; width: 220px; border-radius: 3px; overflow: hidden; }
+.tricolor-bar span { flex: 1; }
+.tc-s { background: var(--saffron); }
+.tc-w { background: var(--white); }
+.tc-g { background: var(--green); }
+
+.setup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  max-width: 440px;
+}
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+label { font-size: 0.8rem; color: var(--muted); display: block; margin-bottom: 0.3rem; }
+input, select {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.85rem;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+input:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: none; border-color: var(--saffron); }
+
+/* ── Buttons ──────────────────────────────────────────────── */
+.btn {
+  padding: 0.65rem 1.4rem;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.9rem;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--saffron); color: #000; }
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-green { background: var(--green); color: #fff; }
+.btn:hover { opacity: 0.88; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Quest area (left column) ─────────────────────────────── */
+#game-area { display: none; }
+#game-area.visible { display: contents; }
+
+.quest-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.quest-badge-icon { font-size: 2rem; }
+.quest-meta h2 {
+  font-family: 'Cinzel', serif;
+  font-size: 1rem;
+  color: var(--saffron);
+}
+.quest-meta p { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+
+.progress-dots {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 1rem;
+}
+.dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  transition: background 0.3s;
+}
+.dot.active  { background: var(--saffron); }
+.dot.done    { background: var(--green); }
+
+/* ── Chat window ──────────────────────────────────────────── */
+#chat-window {
+  height: 340px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  scroll-behavior: smooth;
+}
+.msg {
+  max-width: 85%;
+  padding: 0.65rem 1rem;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+.msg-guide {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+}
+.msg-player {
+  background: var(--saffron);
+  color: #000;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+.msg-guide strong { color: var(--gold); font-size: 0.78rem; display: block; margin-bottom: 2px; }
+.xp-toast {
+  align-self: center;
+  font-size: 0.78rem;
+  color: var(--gold);
+  background: rgba(212,175,55,0.1);
+  border: 1px solid rgba(212,175,55,0.3);
+  padding: 3px 12px;
+  border-radius: 20px;
+}
+
+/* ── Chat input ───────────────────────────────────────────── */
+.chat-input-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.chat-input-row input {
+  flex: 1;
+  padding: 0.6rem 0.85rem;
+}
+
+/* ── Quick questions ──────────────────────────────────────── */
+.quick-qs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 0.75rem;
+}
+.quick-q {
+  font-size: 0.78rem;
+  padding: 4px 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  cursor: pointer;
+  color: var(--muted);
+  transition: all 0.15s;
+}
+.quick-q:hover { border-color: var(--saffron); color: var(--saffron); }
+
+/* ── Right panel ──────────────────────────────────────────── */
+.right-panel { display: flex; flex-direction: column; gap: 1rem; }
+
+/* Badges */
+.badges-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.badge-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+.badge-chip.locked { opacity: 0.35; filter: grayscale(1); }
+
+/* Map */
+#booth-map {
+  width: 100%;
+  height: 220px;
+  border-radius: 8px;
+  background: var(--surface2);
+  overflow: hidden;
+}
+.booth-input-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.booth-input-row input { flex: 1; }
+
+/* Language switcher */
+.lang-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+}
+.lang-btn {
+  padding: 5px;
+  font-size: 0.72rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--muted);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+}
+.lang-btn:hover, .lang-btn.active { border-color: var(--saffron); color: var(--saffron); }
+
+/* Quest complete overlay */
+.quest-complete-banner {
+  display: none;
+  background: linear-gradient(135deg, rgba(19,136,8,0.2), rgba(212,175,55,0.15));
+  border: 1px solid var(--green);
+  border-radius: var(--radius);
+  padding: 1rem;
+  text-align: center;
+  margin-top: 0.75rem;
+}
+.quest-complete-banner.show { display: block; }
+.quest-complete-banner h3 { color: var(--gold); font-family: 'Cinzel', serif; margin-bottom: 0.5rem; }
+
+/* Loading spinner */
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid transparent; border-top-color: currentColor; border-radius: 50%; animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Responsive */
+@media (max-width: 768px) {
+  main { grid-template-columns: 1fr; }
+  .hero-title { font-size: 2rem; }
+  .form-row { grid-template-columns: 1fr; }
+}

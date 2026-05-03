@@ -1,3 +1,12 @@
+"""
+app.py — Main Flask application entry point for CivicQuest.
+
+Handles routing, rate limiting, security headers, exception handling,
+and initialization of the GameEngine and GeminiClient.
+"""
+
+__all__ = ["app", "get_translate_client", "validate_uuid"]
+
 from dotenv import load_dotenv
 import os
 import pathlib
@@ -7,11 +16,13 @@ _env_path = pathlib.Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=_env_path, override=True)
 
 import uuid
+import html
 import logging
 import hashlib
 import gzip
 from io import BytesIO
-from flask import Flask, request, jsonify, render_template, session, make_response, Response
+from typing import Tuple, Any, Dict
+from flask import Flask, request, jsonify, render_template, make_response, Response
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -21,6 +32,14 @@ from gemini_client import GeminiClient
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Constants
+RATE_LIMIT_GLOBAL = ["200 per day", "50 per hour"]
+RATE_LIMIT_START = "10 per minute"
+RATE_LIMIT_ANSWER = "20 per minute"
+RATE_LIMIT_TRANSLATE = "30 per minute"
+RATE_LIMIT_BOOTH = "10 per minute"
+MAX_INPUT_LENGTH = 500
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "civicquest-dev-key-change-in-prod")
@@ -34,7 +53,7 @@ CORS(app, resources={r"/api/*": {"origins": os.environ.get("ALLOWED_ORIGIN", "*"
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["200 per day", "50 per hour"],
+    default_limits=RATE_LIMIT_GLOBAL,
     storage_uri="memory://"
 )
 
@@ -42,7 +61,9 @@ gemini = GeminiClient()
 engine = GameEngine(gemini)
 
 translate_client = None
-def get_translate_client():
+
+def get_translate_client() -> translate.Client:
+    """Lazy load and return the Google Translate Client."""
     global translate_client
     if translate_client is None:
         translate_client = translate.Client()
@@ -52,10 +73,22 @@ def get_translate_client():
 
 @app.after_request
 def after_request(response: Response) -> Response:
+    """Apply strict security headers and optional GZIP compression."""
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    
+    # Strict Content Security Policy (CSP)
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://maps.googleapis.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "connect-src 'self' https://maps.googleapis.com; "
+        "img-src 'self' data: https://maps.gstatic.com https://maps.googleapis.com;"
+    )
+    response.headers['Content-Security-Policy'] = csp
     
     # Gzip compression
     accept_encoding = request.headers.get('Accept-Encoding', '')
@@ -68,41 +101,61 @@ def after_request(response: Response) -> Response:
                 gzip_file.write(data)
             response.set_data(gzip_buffer.getvalue())
             response.headers['Content-Encoding'] = 'gzip'
-            response.headers['Content-Length'] = len(response.get_data())
+            response.headers['Content-Length'] = str(len(response.get_data()))
     return response
 
 @app.errorhandler(Exception)
-def handle_exception(e: Exception):
+def handle_exception(e: Exception) -> Tuple[Response, int]:
+    """Global exception handler to ensure JSON responses on error."""
     logger.error("Unhandled exception: %s", e, exc_info=True)
     if isinstance(e, ValueError):
         return jsonify({"error": str(e)}), 400
     return jsonify({"error": "Internal Server Error"}), 500
 
 def validate_uuid(val: str) -> bool:
+    """Validate if a string is a well-formed UUID v4.
+    
+    Args:
+        val: The string to check.
+        
+    Returns:
+        bool: True if valid UUID.
+    """
     try:
         uuid.UUID(str(val))
         return True
     except ValueError:
         return False
 
+def sanitize_input(val: Any, max_len: int = 50) -> str:
+    """Sanitize and truncate user input to prevent XSS and payload abuse."""
+    if not isinstance(val, str):
+        val = str(val)
+    return html.escape(val.strip()[:max_len])
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route("/")
 @limiter.exempt
 def index() -> Response:
+    """Render the main SPA frontend."""
     resp = make_response(render_template("index.html",
                            maps_api_key=os.environ.get("GOOGLE_MAPS_API_KEY", "")))
     resp.headers['Cache-Control'] = 'public, max-age=3600'
     return resp
 
 @app.route("/api/start", methods=["POST"])
-@limiter.limit("10 per minute")
+@limiter.limit(RATE_LIMIT_START)
 def start_game() -> Response:
-    """Start a new game session for a player."""
+    """Start a new game session for a player.
+    
+    Returns:
+        Response: JSON dict containing session_id and initial game_state.
+    """
     data = request.get_json() or {}
-    player_name = data.get("name", "Citizen").strip()[:50]
-    state_name  = data.get("state", "Gujarat").strip()[:50]
-    language    = data.get("language", "en")[:10]
+    player_name = sanitize_input(data.get("name", "Citizen"), 50)
+    state_name  = sanitize_input(data.get("state", "Gujarat"), 50)
+    language    = sanitize_input(data.get("language", "en"), 10)
 
     session_id  = str(uuid.uuid4())
     game_state  = engine.new_game(session_id, player_name, state_name, language)
@@ -111,9 +164,14 @@ def start_game() -> Response:
 
 @app.route("/api/scene", methods=["POST"])
 def get_scene() -> Response:
-    """Return the current quest scene narration from Gemini."""
+    """Return the current quest scene narration from Gemini.
+    
+    Returns:
+        Response: JSON dict with scene details and narration.
+    """
     data       = request.get_json() or {}
-    session_id = data.get("session_id")
+    session_id = str(data.get("session_id", ""))
+    
     if not session_id or not validate_uuid(session_id):
         return jsonify({"error": "valid session_id required"}), 400
 
@@ -121,12 +179,16 @@ def get_scene() -> Response:
     return jsonify(scene)
 
 @app.route("/api/answer", methods=["POST"])
-@limiter.limit("20 per minute")
+@limiter.limit(RATE_LIMIT_ANSWER)
 def submit_answer() -> Response:
-    """Player submits an answer or chat message within a quest."""
+    """Player submits an answer or chat message within a quest.
+    
+    Returns:
+        Response: JSON dict with AI response, XP gained, and game state.
+    """
     data       = request.get_json() or {}
-    session_id = data.get("session_id")
-    user_input = data.get("input", "").strip()
+    session_id = str(data.get("session_id", ""))
+    user_input = sanitize_input(data.get("input", ""), MAX_INPUT_LENGTH)
 
     if not session_id or not validate_uuid(session_id):
         return jsonify({"error": "valid session_id required"}), 400
@@ -138,9 +200,14 @@ def submit_answer() -> Response:
 
 @app.route("/api/next_quest", methods=["POST"])
 def next_quest() -> Response:
-    """Advance to the next quest after current is completed."""
+    """Advance to the next quest after current is completed.
+    
+    Returns:
+        Response: JSON dict with next quest details or game over stats.
+    """
     data       = request.get_json() or {}
-    session_id = data.get("session_id")
+    session_id = str(data.get("session_id", ""))
+    
     if not session_id or not validate_uuid(session_id):
         return jsonify({"error": "valid session_id required"}), 400
 
@@ -148,12 +215,16 @@ def next_quest() -> Response:
     return jsonify(result)
 
 @app.route("/api/translate", methods=["POST"])
-@limiter.limit("30 per minute")
+@limiter.limit(RATE_LIMIT_TRANSLATE)
 def translate_text() -> Response:
-    """Translate text using Google Translate API."""
+    """Translate text using Google Translate API.
+    
+    Returns:
+        Response: JSON dict with the translated string.
+    """
     data       = request.get_json() or {}
-    text       = data.get("text", "")
-    target     = data.get("target_language", "en")[:10]
+    text       = str(data.get("text", ""))
+    target     = sanitize_input(data.get("target_language", "en"), 10)
 
     if not text:
         return jsonify({"translated_text": ""})
@@ -163,21 +234,31 @@ def translate_text() -> Response:
     return jsonify({"translated_text": translated["translatedText"]})
 
 @app.route("/api/booth_finder", methods=["POST"])
-@limiter.limit("10 per minute")
+@limiter.limit(RATE_LIMIT_BOOTH)
 def booth_finder() -> Response:
-    """Return a Maps-ready address for a polling booth search."""
+    """Return a Maps-ready address for a polling booth search.
+    
+    Returns:
+        Response: JSON dict containing the search_query and Maps URL.
+    """
     data       = request.get_json() or {}
-    address    = data.get("address", "")[:100]
-    state      = data.get("state", "")[:50]
+    address    = sanitize_input(data.get("address", ""), 100)
+    state      = sanitize_input(data.get("state", ""), 50)
+    
     search_query = f"polling booth election office {address} {state} India"
-    return jsonify({"search_query": search_query,
-                    "maps_url": f"https://maps.google.com/?q={search_query.replace(' ', '+')}"})
+    maps_url = f"https://maps.google.com/?q={search_query.replace(' ', '+')}"
+    return jsonify({"search_query": search_query, "maps_url": maps_url})
 
 @app.route("/api/leaderboard", methods=["GET"])
 def leaderboard() -> Response:
-    """Return top scores (stored in-memory for demo; swap for Firestore)."""
+    """Return top scores (stored in-memory for demo; swap for Firestore).
+    
+    Returns:
+        Response: JSON dict with the leaderboard array.
+    """
     scores = engine.get_top_scores(limit=10)
     resp = jsonify({"leaderboard": scores})
+    
     # Add ETag based on scores content
     content_hash = hashlib.md5(str(scores).encode('utf-8')).hexdigest()
     resp.set_etag(content_hash)
@@ -186,7 +267,11 @@ def leaderboard() -> Response:
 @app.route("/health")
 @limiter.exempt
 def health() -> Response:
-    """Health check endpoint for Cloud Run."""
+    """Health check endpoint for Cloud Run.
+    
+    Returns:
+        Response: JSON dict status.
+    """
     resp = jsonify({"status": "ok", "service": "CivicQuest"})
     resp.headers['Cache-Control'] = 'public, max-age=60'
     return resp

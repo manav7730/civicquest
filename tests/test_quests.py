@@ -8,11 +8,7 @@ from unittest.mock import MagicMock, patch
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from game_engine import GameEngine, QUESTS, PlayerState
-
-
-# Fixtures are now imported from conftest.py
-
+from game_engine import GameEngine, QUESTS, PlayerState, LanguageCode, QuestID
 
 # ── Quest definitions ─────────────────────────────────────────────────────────
 
@@ -25,6 +21,10 @@ def test_quest_fields():
     for q in QUESTS:
         assert required.issubset(q.keys()), f"Quest '{q['id']}' missing fields"
 
+def test_quest_enums():
+    assert QuestID.VOTER_REGISTRATION.value == "voter_registration"
+    assert LanguageCode.ENGLISH.value == "en"
+    
 def test_quest_xp_increases():
     xp_values = [q["xp"] for q in QUESTS]
     assert xp_values == sorted(xp_values), "Quest XP should increase each quest"
@@ -43,6 +43,10 @@ def test_new_game_creates_session(engine):
     assert state["total_xp"]    == 0
     assert state["quest_index"] == 0
     assert state["badges"]      == []
+
+def test_new_game_invalid_language_fallback(engine):
+    state = engine.new_game("sess-xyz", "Test", "State", "invalid_lang")
+    assert state["language"] == "en"
 
 def test_new_game_returns_first_quest_title(engine):
     state = engine.new_game("sess-q1", "Dev", "Kerala", "en")

@@ -6,20 +6,51 @@ Five quests walk the player through the entire Indian election cycle:
   →  Q3 Election Timeline  →  Q4 Polling Day  →  Q5 Results & Democracy
 """
 
+__all__ = ["GameEngine", "PlayerState", "LanguageCode", "QuestID"]
+
 import time
 import logging
 import threading
+from enum import Enum
 from dataclasses import dataclass, field
 from typing import Optional, Dict, List, Any
 from gemini_client import GeminiClient
 
 logger = logging.getLogger(__name__)
 
+# Constants
+SESSION_TTL_SECONDS: int = 86400  # 24 hours
+MAX_CHAT_HISTORY: int = 6
+XP_PER_PROGRESS: int = 25
+CLEANUP_INTERVAL: int = 100
+
+class LanguageCode(str, Enum):
+    """Enumeration of supported language codes."""
+    ENGLISH = "en"
+    HINDI = "hi"
+    GUJARATI = "gu"
+    TAMIL = "ta"
+    TELUGU = "te"
+    MARATHI = "mr"
+    BENGALI = "bn"
+    KANNADA = "kn"
+    MALAYALAM = "ml"
+    PUNJABI = "pa"
+
+class QuestID(str, Enum):
+    """Enumeration of the 5 main quests."""
+    VOTER_REGISTRATION = "voter_registration"
+    KNOW_YOUR_CONSTITUENCY = "know_your_constituency"
+    ELECTION_TIMELINE = "election_timeline"
+    POLLING_DAY = "polling_day"
+    RESULTS_DEMOCRACY = "results_democracy"
+
+
 # ── Quest definitions ─────────────────────────────────────────────────────────
 
-QUESTS = [
+QUESTS: List[Dict[str, Any]] = [
     {
-        "id": "voter_registration",
+        "id": QuestID.VOTER_REGISTRATION.value,
         "title": "Quest 1: The Voter's Journey Begins",
         "subtitle": "Get your Voter ID",
         "badge": "Registered Citizen",
@@ -48,7 +79,7 @@ QUESTS = [
         ),
     },
     {
-        "id": "know_your_constituency",
+        "id": QuestID.KNOW_YOUR_CONSTITUENCY.value,
         "title": "Quest 2: Know Your Battlefield",
         "subtitle": "Understand constituencies",
         "badge": "Constituency Scholar",
@@ -77,7 +108,7 @@ QUESTS = [
         ),
     },
     {
-        "id": "election_timeline",
+        "id": QuestID.ELECTION_TIMELINE.value,
         "title": "Quest 3: The Election Calendar",
         "subtitle": "From announcement to results",
         "badge": "Election Analyst",
@@ -106,7 +137,7 @@ QUESTS = [
         ),
     },
     {
-        "id": "polling_day",
+        "id": QuestID.POLLING_DAY.value,
         "title": "Quest 4: The Big Day",
         "subtitle": "Inside the polling booth",
         "badge": "Polling Expert",
@@ -137,7 +168,7 @@ QUESTS = [
         ),
     },
     {
-        "id": "results_democracy",
+        "id": QuestID.RESULTS_DEMOCRACY.value,
         "title": "Quest 5: Democracy Wins!",
         "subtitle": "Counting day and beyond",
         "badge": "Democracy Champion",
@@ -172,12 +203,13 @@ QUESTS = [
 
 # In-memory leaderboard (replace with Firestore in production)
 _leaderboard: List[Dict[str, Any]] = []
-_leaderboard_lock = threading.Lock()
+_leaderboard_lock: threading.Lock = threading.Lock()
 
 # ── Game state ────────────────────────────────────────────────────────────────
 
 @dataclass(slots=True)
 class PlayerState:
+    """Represents a player's progression and state during the game."""
     session_id: str
     player_name: str
     state_name: str
@@ -191,42 +223,72 @@ class PlayerState:
     last_active: float = field(default_factory=time.time)
 
     def current_quest(self) -> Optional[Dict[str, Any]]:
+        """Returns the dictionary for the player's current quest."""
         if self.quest_index < len(QUESTS):
             return QUESTS[self.quest_index]
         return None
 
     def is_finished(self) -> bool:
+        """Returns True if the player has completed all quests."""
         return self.quest_index >= len(QUESTS)
 
 
 # ── Engine ────────────────────────────────────────────────────────────────────
 
 class GameEngine:
-    SESSION_TTL = 86400  # 24 hours
+    """Core engine to manage user sessions and route LLM prompts."""
 
-    def __init__(self, gemini: GeminiClient):
-        self.gemini = gemini
+    def __init__(self, gemini: GeminiClient) -> None:
+        self.gemini: GeminiClient = gemini
         self._sessions: Dict[str, PlayerState] = {}
-        self._session_lock = threading.Lock()
-        self._cleanup_counter = 0
+        self._session_lock: threading.Lock = threading.Lock()
+        self._cleanup_counter: int = 0
 
     # ── Public API ────────────────────────────────────────────────────────────
 
     def new_game(self, session_id: str, player_name: str,
                  state_name: str, language: str) -> Dict[str, Any]:
+        """Initialize a new game state for a player and store it in-memory.
+        
+        Args:
+            session_id: The UUID representing the session.
+            player_name: The user's name.
+            state_name: The user's geographic state.
+            language: The user's requested language.
+            
+        Returns:
+            Dict[str, Any]: A summary of the newly created game state.
+        """
         self._maybe_cleanup()
+        
+        # Enforce valid LanguageCode or default to English
+        try:
+            lang_code = LanguageCode(language).value
+        except ValueError:
+            lang_code = LanguageCode.ENGLISH.value
+
         state = PlayerState(
             session_id=session_id,
             player_name=player_name,
             state_name=state_name,
-            language=language,
+            language=lang_code,
         )
+        
+        # Lock acquired before modifying the shared _sessions dictionary
         with self._session_lock:
             self._sessions[session_id] = state
         logger.info("New game: %s (%s)", player_name, session_id[:8])
         return self._state_summary(state)
 
     def get_current_scene(self, session_id: str) -> Dict[str, Any]:
+        """Retrieve the quest scene text from the Gemini model.
+        
+        Args:
+            session_id: The active session UUID.
+            
+        Returns:
+            Dict[str, Any]: Scene JSON including the narration and suggested questions.
+        """
         state = self._get_state(session_id)
         quest = state.current_quest()
         if not quest:
@@ -258,13 +320,88 @@ class GameEngine:
         }
 
     def process_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
+        """Process a user's answer/question and pass it to Gemini.
+        
+        Args:
+            session_id: The active session UUID.
+            user_input: The user's submitted string.
+            
+        Returns:
+            Dict[str, Any]: JSON including the AI response and XP gained.
+        """
         state = self._get_state(session_id)
         quest = state.current_quest()
         if not quest:
             return {"type": "error", "message": "Game already completed."}
 
-        # Build the AI prompt with full knowledge context
-        system_prompt = (
+        system_prompt = self._build_system_prompt(state, quest)
+        history = state.chat_history[-MAX_CHAT_HISTORY:] if state.chat_history else []
+        
+        response_text = self.gemini.chat(system_prompt, history, user_input, knowledge=quest["knowledge"])
+
+        # Detect progress signal
+        quest_progressed = "[QUEST_PROGRESS]" in response_text
+        clean_response   = response_text.replace("[QUEST_PROGRESS]", "").strip()
+
+        self._update_chat_history(state, user_input, clean_response)
+        xp_gained = self._evaluate_progress(state, quest_progressed)
+
+        return {
+            "type": "response",
+            "response": clean_response,
+            "xp_gained": xp_gained,
+            "quest_progressed": quest_progressed,
+            "game_state": self._state_summary(state),
+        }
+
+    def advance_quest(self, session_id: str) -> Dict[str, Any]:
+        """Move the player state to the next quest.
+        
+        Args:
+            session_id: The active session UUID.
+            
+        Returns:
+            Dict[str, Any]: JSON dict containing the earned badge or a game over notice.
+        """
+        state = self._get_state(session_id)
+        if state.is_finished():
+            return {"type": "error", "message": "Game already completed."}
+            
+        quest = state.current_quest()
+        if not quest:
+            return {"type": "error", "message": "No active quest."}
+
+        self._award_quest_rewards(state, quest)
+        
+        game_over = self._check_game_over(state)
+        if game_over:
+            return game_over
+
+        return {
+            "type": "quest_complete",
+            "earned_badge": quest["badge"],
+            "earned_badge_emoji": quest["badge_emoji"],
+            "xp_earned": quest["xp"],
+            "game_state": self._state_summary(state),
+        }
+
+    def get_top_scores(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Return the top scores from the in-memory leaderboard.
+        
+        Args:
+            limit: Maximum number of scores to return.
+            
+        Returns:
+            List[Dict[str, Any]]: The leaderboard list.
+        """
+        with _leaderboard_lock:
+            return sorted(_leaderboard, key=lambda x: x["xp"], reverse=True)[:limit]
+
+    # ── Private helpers ───────────────────────────────────────────────────────
+
+    def _build_system_prompt(self, state: PlayerState, quest: Dict[str, Any]) -> str:
+        """Helper to construct the prompt string for the Gemini Chat engine."""
+        return (
             f"You are Desh, an enthusiastic election guide helping {state.player_name} from "
             f"{state.state_name} understand Indian elections through an RPG adventure. "
             f"Current quest topic: {quest['topic']}. "
@@ -276,43 +413,21 @@ class GameEngine:
             f"Respond in: {self._language_label(state.language)}."
         )
 
-        # Maintain chat history per quest (last 6 turns)
-        history = state.chat_history[-6:] if state.chat_history else []
-        response_text = self.gemini.chat(system_prompt, history, user_input,
-                                            knowledge=quest["knowledge"])
-
-        # Detect progress signal
-        quest_progressed = "[QUEST_PROGRESS]" in response_text
-        clean_response   = response_text.replace("[QUEST_PROGRESS]", "").strip()
-
-        # Update chat history
-        state.chat_history.append({"role": "user",    "content": user_input})
+    def _update_chat_history(self, state: PlayerState, user_input: str, clean_response: str) -> None:
+        """Helper to append user and model replies to the state."""
+        state.chat_history.append({"role": "user", "content": user_input})
         state.chat_history.append({"role": "assistant", "content": clean_response})
 
-        # Award XP on progress (once per question, capped)
+    def _evaluate_progress(self, state: PlayerState, quest_progressed: bool) -> int:
+        """Helper to calculate and award XP for answering questions correctly."""
         xp_gained = 0
         if quest_progressed and not state.quest_completed:
-            xp_gained = 25
+            xp_gained = XP_PER_PROGRESS
             state.total_xp += xp_gained
+        return xp_gained
 
-        return {
-            "type": "response",
-            "response": clean_response,
-            "xp_gained": xp_gained,
-            "quest_progressed": quest_progressed,
-            "game_state": self._state_summary(state),
-        }
-
-    def advance_quest(self, session_id: str) -> Dict[str, Any]:
-        state = self._get_state(session_id)
-        if state.is_finished():
-            return {"type": "error", "message": "Game already completed."}
-            
-        quest = state.current_quest()
-        if not quest:
-            return {"type": "error", "message": "No active quest."}
-
-        # Award quest XP and badge
+    def _award_quest_rewards(self, state: PlayerState, quest: Dict[str, Any]) -> None:
+        """Helper to give the player XP and badges upon quest completion."""
         state.total_xp += quest["xp"]
         state.badges.append({
             "name": quest["badge"],
@@ -323,7 +438,8 @@ class GameEngine:
         state.quest_completed = False
         state.quest_index += 1
 
-        # Check game over
+    def _check_game_over(self, state: PlayerState) -> Optional[Dict[str, Any]]:
+        """Helper to record the score and return game over JSON if no more quests remain."""
         if state.is_finished():
             self._record_score(state)
             return {
@@ -332,22 +448,10 @@ class GameEngine:
                 "badges": state.badges,
                 "total_xp": state.total_xp,
             }
-
-        return {
-            "type": "quest_complete",
-            "earned_badge": quest["badge"],
-            "earned_badge_emoji": quest["badge_emoji"],
-            "xp_earned": quest["xp"],
-            "game_state": self._state_summary(state),
-        }
-
-    def get_top_scores(self, limit: int = 10) -> List[Dict[str, Any]]:
-        with _leaderboard_lock:
-            return sorted(_leaderboard, key=lambda x: x["xp"], reverse=True)[:limit]
-
-    # ── Private helpers ───────────────────────────────────────────────────────
+        return None
 
     def _get_state(self, session_id: str) -> PlayerState:
+        """Fetch the PlayerState object by session UUID."""
         with self._session_lock:
             state = self._sessions.get(session_id)
         if not state:
@@ -356,21 +460,24 @@ class GameEngine:
         return state
 
     def _maybe_cleanup(self) -> None:
-        """Periodically remove old sessions to free memory."""
+        """Periodically remove old sessions to free memory based on SESSION_TTL_SECONDS."""
         self._cleanup_counter += 1
-        if self._cleanup_counter < 100:
+        if self._cleanup_counter < CLEANUP_INTERVAL:
             return
         self._cleanup_counter = 0
         now = time.time()
+        
+        # Lock acquired before iterating and mutating the global session store
         with self._session_lock:
             to_remove = [sid for sid, state in self._sessions.items() 
-                         if now - state.last_active > self.SESSION_TTL]
+                         if now - state.last_active > SESSION_TTL_SECONDS]
             for sid in to_remove:
                 del self._sessions[sid]
         if to_remove:
             logger.info("Cleaned up %d inactive sessions", len(to_remove))
 
     def _state_summary(self, state: PlayerState) -> Dict[str, Any]:
+        """Generate a summarized dict of the player state for JSON transmission."""
         quest = state.current_quest()
         return {
             "player_name": state.player_name,
@@ -386,6 +493,7 @@ class GameEngine:
         }
 
     def _victory_message(self, state: PlayerState) -> str:
+        """Generate the final congratulatory message for the user."""
         return (
             f"Congratulations, {state.player_name}! You have completed all 5 quests "
             f"and earned {state.total_xp} XP. You are now a true Democracy Champion! "
@@ -394,6 +502,7 @@ class GameEngine:
         )
 
     def _record_score(self, state: PlayerState) -> None:
+        """Append the final score to the shared in-memory leaderboard."""
         with _leaderboard_lock:
             _leaderboard.append({
                 "name": state.player_name,
@@ -404,10 +513,17 @@ class GameEngine:
 
     @staticmethod
     def _language_label(code: str) -> str:
+        """Map language string codes to their English display names."""
         mapping = {
-            "en": "English", "hi": "Hindi", "gu": "Gujarati",
-            "ta": "Tamil",   "te": "Telugu", "mr": "Marathi",
-            "bn": "Bengali", "kn": "Kannada", "ml": "Malayalam",
-            "pa": "Punjabi",
+            LanguageCode.ENGLISH.value: "English", 
+            LanguageCode.HINDI.value: "Hindi", 
+            LanguageCode.GUJARATI.value: "Gujarati",
+            LanguageCode.TAMIL.value: "Tamil",   
+            LanguageCode.TELUGU.value: "Telugu", 
+            LanguageCode.MARATHI.value: "Marathi",
+            LanguageCode.BENGALI.value: "Bengali", 
+            LanguageCode.KANNADA.value: "Kannada", 
+            LanguageCode.MALAYALAM.value: "Malayalam",
+            LanguageCode.PUNJABI.value: "Punjabi",
         }
         return mapping.get(code, "English")

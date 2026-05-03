@@ -16,7 +16,7 @@
   <meta name="twitter:description" content="Embark on India's greatest democratic adventure. Learn about elections through a quest-based RPG." />
 
   <!-- Structured Data for Educational Application -->
-  <script type="application/ld+json">
+  <script nonce="{{ csp_nonce }}" type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "WebApplication",
@@ -32,27 +32,33 @@
   }
   </script>
 
+  <!-- Favicon -->
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml" />
+
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link nonce="{{ csp_nonce }}" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 
   <!-- Static CSS -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <link nonce="{{ csp_nonce }}" rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 
   <!-- Google Maps (API key injected by Flask) -->
-  <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ maps_api_key }}&libraries=places"></script>
+  <script nonce="{{ csp_nonce }}" async defer src="https://maps.googleapis.com/maps/api/js?key={{ maps_api_key }}&libraries=places"></script>
 </head>
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 
+<!-- Screen reader live announcer -->
+<div id="sr-announcer" aria-live="assertive" aria-atomic="true" class="sr-only"></div>
+
 <!-- ── Header ────────────────────────────────────────────────────────────── -->
 <header role="banner">
   <div class="logo">Civic<span>Quest</span></div>
-  <div class="hud" id="hud" style="display:none" role="region" aria-label="Player Stats">
+  <div class="hud hud-hidden" id="hud" role="region" aria-label="Player Stats">
     <div class="hud-item"><strong id="hud-name" aria-label="Player name">—</strong></div>
     <div class="hud-item" aria-label="Experience points">XP: <strong id="hud-xp">0</strong></div>
-    <div class="xp-bar-wrap" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="1000" id="xp-progress-bar">
-      <div class="xp-bar" id="xp-bar" style="width:0%"></div>
+    <div class="xp-bar-wrap" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="1000" aria-label="Experience progress" id="xp-progress-bar">
+      <div class="xp-bar" id="xp-bar"></div>
     </div>
     <div class="hud-item" id="hud-quest" aria-live="polite">—</div>
   </div>
@@ -65,10 +71,10 @@
     <h1 class="hero-title">CivicQuest</h1>
     <p class="hero-subtitle">
       Embark on India's greatest democratic adventure. Complete 5 quests to become a
-      <strong style="color:var(--gold)">Democracy Champion</strong>.
+      <strong class="gold-text">Democracy Champion</strong>.
     </p>
 
-    <form class="setup-form" onsubmit="startGame(event)" aria-label="Game Setup">
+    <form class="setup-form" id="setup-form" aria-label="Game Setup">
       <div>
         <label for="player-name">Your name</label>
         <input type="text" id="player-name" placeholder="Enter your name" required maxlength="50" aria-required="true" />
@@ -115,7 +121,7 @@
         <div class="quest-header" aria-live="polite">
           <div class="quest-badge-icon" id="quest-icon" role="img" aria-label="Quest Badge">🗺️</div>
           <div class="quest-meta">
-            <h2 id="quest-title">Loading quest…</h2>
+            <h2 id="quest-title" tabindex="-1">Loading quest…</h2>
             <p id="quest-subtitle"></p>
           </div>
         </div>
@@ -129,13 +135,13 @@
         <div class="chat-input-row">
           <label for="chat-input" class="sr-only">Your message to Desh</label>
           <input type="text" id="chat-input" placeholder="Ask Desh anything about elections…" />
-          <button class="btn btn-primary" id="send-btn" onclick="sendMessage()">Send</button>
+          <button class="btn btn-primary" id="send-btn">Send</button>
         </div>
 
         <div class="quest-complete-banner" id="complete-banner" role="alert" aria-live="assertive">
           <h3 id="banner-badge-text">Quest Complete!</h3>
-          <p id="banner-msg" style="color:var(--muted);font-size:0.85rem;margin:0.4rem 0 0.8rem"></p>
-          <button class="btn btn-green" id="next-quest-btn" onclick="nextQuest()">Next Quest ➜</button>
+          <p id="banner-msg" class="banner-msg-text"></p>
+          <button class="btn btn-green" id="next-quest-btn">Next Quest ➜</button>
         </div>
       </div>
     </section>
@@ -156,7 +162,7 @@
         <div class="booth-input-row">
           <label for="booth-address" class="sr-only">Enter your area or pincode</label>
           <input type="text" id="booth-address" placeholder="Enter your area / pincode" />
-          <button class="btn btn-secondary" onclick="findBooth()" aria-label="Search for polling booths">Search</button>
+          <button class="btn btn-secondary" id="booth-search-btn" aria-label="Search for polling booths">Search</button>
         </div>
       </section>
 
@@ -170,7 +176,12 @@
   </div>
 </main>
 
+<!-- Footer -->
+<footer role="contentinfo" class="site-footer">
+  <p>CivicQuest — An educational initiative for Indian democratic literacy. Built with Google Gemini, Maps & Translate.</p>
+</footer>
+
 <!-- Static JS -->
-<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

@@ -22,19 +22,25 @@ is formed — in their own language.
 ## Educational Outcomes
 
 Players who complete the 5-quest journey will successfully understand:
-1. **Voter Registration**: How to apply for an EPIC card (Form 6) and check the Electoral Roll.
-2. **Constituencies**: The structure of Lok Sabha and Vidhan Sabha, and the roles of MPs and MLAs.
-3. **The Election Timeline**: The phases of an election, the Model Code of Conduct, and the campaigning silence period.
-4. **Polling Day Logistics**: How to use an EVM, the purpose of VVPAT, and valid identification documents.
-5. **Government Formation**: How votes are counted, majority thresholds, and the process of forming a government.
+1. **Voter Registration**: How to apply for an EPIC card (Form 6), check the Electoral Roll, and use the NVSP portal or Voter Helpline App.
+2. **Constituencies**: The structure of Lok Sabha (543 seats) and Vidhan Sabha, the roles of MPs and MLAs, and how the Delimitation Commission works.
+3. **The Election Timeline**: The phases of an election, the Model Code of Conduct (MCC), nomination filing (₹25,000 deposit), campaigning silence period, and SVEEP.
+4. **Polling Day Logistics**: How to use an EVM, the purpose of VVPAT (7-second verification), indelible ink, and the 12 valid identification documents.
+5. **Government Formation**: How votes are counted round-by-round, the 272-seat majority threshold, the President's role, and what happens in a hung parliament.
+
+### Learning Assessment
+
+Each quest includes 4 guided questions answered by an AI tutor (Desh), with real-time progress tracking via `[QUEST_PROGRESS]` signals. Players earn XP and badges as measurable indicators of knowledge acquisition.
 
 ## Accessibility Commitment
 
 We believe democracy is for everyone, and so is civic education. CivicQuest is built to exceed **WCAG (Web Content Accessibility Guidelines) 2.1 AAA standards**:
-- **Screen Reader Support:** Full semantic HTML, ARIA landmarks, `aria-live` dynamic regions, and `role="img"` for all emojis.
+- **Screen Reader Support:** Full semantic HTML, ARIA landmarks, `aria-live` dynamic regions, `role="img"` for all emojis, and a dedicated screen reader announcer (`aria-live="assertive"`).
 - **Keyboard Navigation:** 100% keyboard accessible, complete with a "Skip to main content" link and highly visible focus states.
 - **Visual Contrast:** High-contrast color palettes ensuring readability for visually impaired users.
-- **Multilingual Availability:** Google Translate API integration ensures that language is never a barrier, supporting 10 Indian languages.
+- **Focus Management:** Automatic focus transitions when game state changes (e.g., quest start moves focus to quest title).
+- **Dynamic ARIA Updates:** XP progress bar updates `aria-valuenow` and `aria-valuetext` in real time.
+- **Multilingual Availability:** Google Translate API integration ensures that language is never a barrier, supporting 10 Indian languages. The `<html lang>` attribute updates dynamically.
 
 ---
 
@@ -81,12 +87,43 @@ Flask App (Cloud Run)
      ├── /api/answer       → Gemini answers player questions
      ├── /api/next_quest   → Advances to next quest
      ├── /api/translate    → Google Translate API
-     └── /api/booth_finder → Returns Maps search query
+     ├── /api/booth_finder → Returns Maps search query
+     ├── /api/leaderboard  → Returns top scores (GET)
+     └── /health           → Health check for Cloud Run
           │
           ├── Google Gemini 2.0 Flash (AI narration + Q&A)
           ├── Google Cloud Translate (10 languages)
           └── Google Maps JS + Places API (booth finder, frontend)
 ```
+
+### API Reference
+
+| Endpoint | Method | Payload | Response |
+|----------|--------|---------|----------|
+| `/api/start` | POST | `{ name, state, language }` | `{ session_id, game_state }` |
+| `/api/scene` | POST | `{ session_id }` | `{ type, quest_title, narration, suggested_questions, ... }` |
+| `/api/answer` | POST | `{ session_id, input }` | `{ type, response, xp_gained, quest_progressed, game_state }` |
+| `/api/next_quest` | POST | `{ session_id }` | `{ type, earned_badge, xp_earned, game_state }` |
+| `/api/translate` | POST | `{ text, target_language }` | `{ translated_text }` |
+| `/api/booth_finder` | POST | `{ address, state }` | `{ search_query, maps_url }` |
+| `/api/leaderboard` | GET | — | `{ leaderboard: [...] }` |
+| `/health` | GET | — | `{ status, service }` |
+
+---
+
+## Security
+
+CivicQuest implements defense-in-depth security:
+- **Content Security Policy (CSP)** with per-request nonces (no `unsafe-inline`)
+- **HSTS** with `includeSubDomains`
+- **X-Frame-Options: DENY**, **X-Content-Type-Options: nosniff**
+- **Referrer-Policy: strict-origin-when-cross-origin**
+- **Permissions-Policy** restricting camera, microphone, geolocation
+- **Rate limiting** on all API endpoints via Flask-Limiter
+- **Input sanitization** with `html.escape()` and length truncation
+- **AI output sanitization** on the frontend to prevent XSS
+- **Secure session cookies** (Secure, HttpOnly, SameSite=Lax)
+- **Random secret key generation** when env var is not set
 
 ---
 
@@ -116,16 +153,28 @@ Flask App (Cloud Run)
 
 ```
 civicquest/
-├── app.py              # Flask routes
-├── game_engine.py      # Quest definitions, state, scoring logic
-├── gemini_client.py    # Gemini API wrapper (generate + chat)
-├── requirements.txt
-├── Dockerfile
-├── .env.example
+├── __init__.py             # Package marker
+├── app.py                  # Flask routes, middleware, security headers
+├── game_engine.py          # Quest definitions, state management, scoring logic
+├── gemini_client.py        # Gemini API wrapper (generate + chat + retry)
+├── requirements.txt        # Python dependencies
+├── pytest.ini              # Test configuration with coverage
+├── Dockerfile              # Cloud Run container definition
+├── .env.example            # Environment variable template
 ├── templates/
-│   └── index.html      # Complete single-page frontend
+│   └── index.html          # Complete single-page frontend (CSP nonce support)
+├── static/
+│   ├── favicon.svg         # CivicQuest favicon
+│   ├── css/
+│   │   └── style.css       # Full application stylesheet
+│   └── js/
+│       └── main.js         # Frontend controller (sanitization, a11y, error handling)
 └── tests/
-    └── test_quests.py  # 18 unit tests (pytest)
+    ├── __init__.py          # Test package marker
+    ├── conftest.py          # Shared fixtures (mock Gemini, engine, sessions)
+    ├── test_app.py          # 18 Flask route & security tests
+    ├── test_quests.py       # 30 GameEngine & quest logic tests
+    └── test_gemini_client.py # 13 Gemini client tests
 ```
 
 ---
@@ -154,8 +203,10 @@ python app.py
 ## Running Tests
 
 ```bash
+# Run all tests with coverage report
 pytest tests/ -v
-# Expected: 18 tests pass
+
+# Expected: 61 tests pass, 85%+ code coverage
 ```
 
 ---

@@ -11,8 +11,8 @@ import os
 import time
 import logging
 import pathlib
-import functools
-from typing import Callable, Any, List, Dict
+from typing import Callable, Any, List, Dict, Optional
+
 from dotenv import dotenv_values
 from google import genai
 from google.genai import types
@@ -31,8 +31,8 @@ MAX_OUTPUT_TOKENS: int = 512
 TEMPERATURE: float     = 0.7
 
 # Pre-load .env values as a fallback in case load_dotenv wasn't called yet
-_env_path = pathlib.Path(__file__).resolve().parent / ".env"
-_env_vals = dotenv_values(_env_path)
+_env_path: pathlib.Path = pathlib.Path(__file__).resolve().parent / ".env"
+_env_vals: Dict[str, Optional[str]] = dotenv_values(_env_path)
 
 
 class GeminiClient:
@@ -41,7 +41,7 @@ class GeminiClient:
     def __init__(self) -> None:
         """Initialize the Gemini client and API key."""
         # Try os.environ first, fall back to reading .env directly
-        api_key = os.environ.get("GEMINI_API_KEY") or _env_vals.get("GEMINI_API_KEY")
+        api_key: Optional[str] = os.environ.get("GEMINI_API_KEY") or _env_vals.get("GEMINI_API_KEY")
         if not api_key:
             logger.warning("GEMINI_API_KEY not set — responses will be mocked.")
         self._client = genai.Client(api_key=api_key or "MISSING")
@@ -124,6 +124,7 @@ class GeminiClient:
                 self._throttle()
                 response = api_call()
                 self._last_call_ts = time.time()
+                logger.info("Gemini %s succeeded (attempt %d/%d)", operation, attempt, MAX_RETRIES)
                 return str(response.text).strip()
             except Exception as e:
                 self._last_call_ts = time.time()
@@ -143,7 +144,6 @@ class GeminiClient:
 
     # ── public API ───────────────────────────────────────────────────────────
 
-    @functools.lru_cache(maxsize=128)
     def generate(self, prompt: str, knowledge: str = "") -> str:
         """Single-turn generation (scene narration) with retry and fallback.
         
@@ -183,7 +183,7 @@ class GeminiClient:
             str: Chat response.
         """
         def make_call() -> Any:
-            gemini_history = []
+            gemini_history: List[types.Content] = []
             for turn in history:
                 role = "model" if turn["role"] == "assistant" else "user"
                 gemini_history.append(
